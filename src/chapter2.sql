@@ -1,5 +1,7 @@
+-- creating new database
 CREATE DATABASE analysis;
 
+-- adding new table into database
 CREATE TABLE teachers (
 	id bigserial,
 	first_name varchar(25),
@@ -9,6 +11,7 @@ CREATE TABLE teachers (
 	salary numeric
 );
 
+-- adding values into the existing table
 INSERT INTO teachers
 	(first_name, last_name, school, hire_date, salary)
 VALUES
@@ -18,6 +21,5 @@ VALUES
 	('Samantha', 'Bush', 'Mayers Middle School', '2011-10-30', 36200),
 	('Betty', 'Diaz', 'Mayers Middle School', '2005-08-30', 43500),
 	('Kathleen', 'Roush', 'F.D. Roosvelt HS', '2010-10-22', 38500);
-
 
 SELECT * FROM teachers;
