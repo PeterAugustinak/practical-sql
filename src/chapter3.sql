@@ -86,6 +86,7 @@ FROM teachers
 WHERE  school LIKE '%Roos%'
 ORDER BY hire_date DESC;
 
+
 -- try it yourself exercises
 SELECT school, first_name, last_name
 FROM teachers
