@@ -83,3 +83,26 @@ SELECT town, 'Mills', supervisor, salary -- col will be added with default val
 FROM supervisor_salaries_temp;
 
 DROP TABLE supervisor_salaries_temp;
+
+
+-- EXPORT DATA
+
+-- exporting all data
+COPY us_counties_pop_est_2019
+TO '/var/lib/postgresql/us_counties_export.txt'
+WITH (FORMAT CSV, HEADER, DELIMITER '|');
+
+-- exporting particular columns
+COPY us_counties_pop_est_2019
+    (county_name, internal_point_lat, internal_point_lon)
+TO '/var/lib/postgresql/us_counties_export_specific_columns.txt'
+WITH (FORMAT CSV, HEADER, DELIMITER '-');
+
+-- exporting query results
+COPY (
+    SELECT county_name, state_name
+    FROM us_counties_pop_est_2019
+    WHERE county_name ILIKE '%mill%'
+    )
+TO '/var/lib/postgresql/us_counties_export_specific_columns_from_select.txt'
+WITH (FORMAT CSV, HEADER);
