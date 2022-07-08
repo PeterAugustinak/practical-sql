@@ -106,3 +106,15 @@ COPY (
     )
 TO '/var/lib/postgresql/us_counties_export_specific_columns_from_select.txt'
 WITH (FORMAT CSV, HEADER);
+
+
+-- try it yourself exercises
+CREATE TABLE movies_actor (
+    id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    movie text,
+    actor text
+);
+
+COPY movies_actor (id, movie, actor)
+FROM '/var/lib/postgresql/movies_actor.txt'
+WITH (FORMAT CSV , HEADER, DELIMITER ':'); -- not working :(
