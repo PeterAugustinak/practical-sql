@@ -227,4 +227,72 @@ SELECT * FROM district_2035
 ORDER BY id;
 
 -- performing math in JOINed table columns
+CREATE TABLE us_counties_pop_est_2010 (
+    state_fips text,                         -- State FIPS code
+    county_fips text,                        -- County FIPS code
+    region smallint,                         -- Region
+    state_name text,                         -- State name
+    county_name text,                        -- County name
+    estimates_base_2010 integer,             -- 4/1/2010 resident total population estimates base
+    CONSTRAINT counties_2010_key PRIMARY KEY (state_fips, county_fips)
+);
 
+COPY us_counties_pop_est_2010
+FROM '/var/lib/postgresql/us_counties_pop_est_2010.csv'
+WITH (FORMAT CSV, HEADER);
+
+SELECT * FROM us_counties_pop_est_2010;
+
+SELECT c2019.county_name,
+       c2019.state_name,
+       c2019.pop_est_2019 AS pop_2019,
+       c2010.estimates_base_2010 AS pop_2010,
+       c2019.pop_est_2019 - c2010.estimates_base_2010 AS raw_change,
+       round( (c2019.pop_est_2019::numeric - c2010.estimates_base_2010)
+           / c2010.estimates_base_2010 * 100, 1 ) AS pct_change
+FROM us_counties_pop_est_2019 AS c2019
+    JOIN us_counties_pop_est_2010 AS c2010
+ON c2019.state_fips = c2010.state_fips
+    AND c2019.county_fips = c2010.county_fips
+ORDER BY pct_change DESC;
+
+-- try it yourself exercises
+-- 1. Concho County, Texas
+
+-- 2. using UNION to combine result from 2010 and 2019
+SELECT '2010' AS year,
+       estimates_base_2010 AS estimates_pop,
+       state_name,
+       county_name
+FROM us_counties_pop_est_2010
+UNION
+SELECT '2019' AS year,
+       pop_est_2019 AS estimates_pop,
+       state_name,
+       county_name
+FROM us_counties_pop_est_2019
+ORDER BY estimates_pop DESC;
+
+-- 3. median of the percent change between 2010 and 2019
+SELECT percentile_cont(.5)
+            WITHIN GROUP (ORDER BY
+       round(
+           (c2019.pop_est_2019::numeric - c2010.estimates_base_2010)
+           / c2010.estimates_base_2010 * 100,
+           1 )) AS pct_change
+FROM us_counties_pop_est_2019 AS c2019
+    JOIN us_counties_pop_est_2010 AS c2010
+ON c2019.state_fips = c2010.state_fips
+    AND c2019.county_fips = c2010.county_fips
+ORDER BY pct_change;
+
+-- additional - average of the percent change between 2010 and 2019
+SELECT avg(round(
+           (c2019.pop_est_2019::numeric - c2010.estimates_base_2010)
+           / c2010.estimates_base_2010 * 100,
+           1 )) AS pct_change
+FROM us_counties_pop_est_2019 AS c2019
+    JOIN us_counties_pop_est_2010 AS c2010
+ON c2019.state_fips = c2010.state_fips
+    AND c2019.county_fips = c2010.county_fips
+ORDER BY pct_change;
