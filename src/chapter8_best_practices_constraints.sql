@@ -237,7 +237,7 @@ CREATE TABLE albums (
 CREATE TABLE songs (
     song_id bigint GENERATED ALWAYS AS IDENTITY,
     title text NOT NULL,
-    composers text CON,
+    composers text,
     album_id bigint REFERENCES albums (album_id) ON DELETE CASCADE -- added foreign key + cascade delete
 );
 
