@@ -169,7 +169,6 @@ WITH (FORMAT CSV, HEADER);
 
 CREATE INDEX libname_2016_idx ON pls_fy2016_libraries (libname);
 
-
 -- counting rows and values using count()
 SELECT count(*)
 FROM pls_fy2018_libraries;
@@ -262,5 +261,101 @@ GROUP BY pls18.stabr
 ORDER BY chg_2018_17 DESC;
 
 
+-- filtering and aggregate query using HAVING
+-- should be the similar as WHERE clause but applied for the GROUPS
+SELECT pls18.stabr,
+       sum(pls18.visits) AS visits_2018,
+       sum(pls17.visits) AS visits_2017,
+       sum(pls16.visits) AS visits_2016,
+       round((sum(pls18.visits::numeric) - sum(pls17.visits))
+                 / sum(pls17.visits) * 100, 1) AS chg_2018_17,
+       round((sum(pls17.visits::numeric) - sum(pls16.visits))
+                 / sum(pls16.visits) * 100, 1) AS chg_2017_16
+FROM pls_fy2018_libraries pls18 JOIN pls_fy2017_libraries pls17
+ON pls18.fscskey = pls17.fscskey
+JOIN pls_fy2016_libraries pls16
+ON pls18.fscskey = pls16.fscskey
+WHERE pls18.visits >= 0 AND pls17.visits >= 0 AND pls16.visits >= 0
+GROUP BY pls18.stabr
+HAVING sum(pls18.visits) > 50000000
+ORDER BY chg_2018_17 DESC;
 
 
+-- try it yourself
+-- 1. examining staff change over time
+SELECT pls18.stabr,
+       sum(pls18.totstaff) AS staff_2018,
+       round((sum(pls18.totstaff::numeric) - sum(pls17.totstaff))
+                 / sum(pls17.totstaff) * 100, 1) AS staff_chg_2018_17,
+       pls17.visits AS visits_2017,
+       sum(pls17.totstaff) AS staff_2017,
+       round((sum(pls17.totstaff::numeric) - sum(pls16.totstaff))
+                 / sum(pls16.totstaff) * 100, 1) AS staff_chg_2017_16,
+       pls16.visits AS visits_2016,
+       sum(pls16.totstaff) AS staff_2016
+FROM pls_fy2018_libraries pls18 JOIN pls_fy2017_libraries pls17
+ON pls18.fscskey = pls17.fscskey
+JOIN pls_fy2016_libraries pls16
+ON pls18.fscskey = pls16.fscskey
+WHERE pls18.totstaff >= 0 AND pls17.totstaff >= 0 AND pls16.totstaff >= 0
+GROUP BY pls18.stabr, pls17.visits, pls16.visits
+HAVING sum(pls16.visits) > 100000
+ORDER BY pls17.visits DESC, pls16.visits DESC, staff_chg_2018_17 DESC;
+
+-- 2. percent change of visits grouping obereg
+-- just check if all years have the same number of obereg
+SELECT count(DISTINCT pls18.obereg) AS obereg_2018,
+       count(DISTINCT pls17.obereg) AS obereg_2017,
+       count(DISTINCT pls16.obereg) AS obereg_2016
+FROM pls_fy2018_libraries pls18 JOIN pls_fy2017_libraries pls17
+ON pls18.fscskey = pls17.fscskey
+JOIN pls_fy2016_libraries pls16
+ON pls18.fscskey = pls16.fscskey
+ORDER BY count(DISTINCT pls18.obereg) DESC;
+
+-- create new table to map obereg codes to names
+CREATE TABLE obereg (
+    obereg text CONSTRAINT obereg_key PRIMARY KEY,
+    region_name text);
+
+INSERT INTO obereg (obereg, region_name)
+VALUES
+    ('01', 'New England'),
+    ('02', 'Mid East'),
+    ('03', 'Great Lakes'),
+    ('04', 'Plains'),
+    ('05', 'Southeast'),
+    ('06', 'Southwest'),
+    ('07', 'Rocky Mountains'),
+    ('08', 'Far West'),
+    ('09', 'Outlying Areas');
+
+SELECT pls18.obereg AS library_agency,
+       obereg.region_name AS region_name,
+       sum(pls18.visits) AS visits_2018,
+       round((sum(pls18.visits::numeric) - sum(pls17.visits))
+                 / sum(pls17.visits) * 100, 1) AS chg_2018_17,
+       sum(pls17.visits) AS visits_2017,
+       round((sum(pls17.visits::numeric) - sum(pls16.visits))
+                 / sum(pls16.visits) * 100, 1) AS chg_2017_16,
+       sum(pls16.visits) AS visits_2016
+FROM pls_fy2018_libraries pls18 JOIN pls_fy2017_libraries pls17
+ON pls18.fscskey = pls17.fscskey
+JOIN pls_fy2016_libraries pls16
+ON pls18.fscskey = pls16.fscskey
+JOIN obereg
+ON pls18.obereg = obereg.obereg
+WHERE pls18.visits >= 0 AND pls17.visits >= 0 AND pls16.visits >= 0
+GROUP BY pls18.obereg, obereg.region_name
+ORDER BY chg_2018_17 DESC;
+
+-- 3. find agencies missing in the tables
+SELECT pls18.obereg,
+       pls17.obereg,
+       pls16.obereg
+FROM pls_fy2018_libraries pls18 FULL OUTER JOIN pls_fy2017_libraries pls17
+USING (fscskey)
+FULL OUTER JOIN pls_fy2016_libraries pls16
+USING (fscskey)
+WHERE pls18.obereg IS NULL OR pls17.obereg IS NULL OR pls16.obereg IS NULL
+GROUP BY pls18.obereg, pls17.obereg, pls16.obereg;
