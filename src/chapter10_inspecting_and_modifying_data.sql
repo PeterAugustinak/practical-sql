@@ -237,4 +237,103 @@ SELECT st, zip
 FROM meat_poultry_egg_establishments
 WHERE length(zip) < 5;
 
--- updating values accross tables
+-- updating values across tables
+-- create new table with state regions
+CREATE TABLE state_regions (
+    st text CONSTRAINT st_key PRIMARY KEY,
+    region text NOT NULL
+);
+
+COPY state_regions
+FROM '/var/lib/postgresql/state_regions.csv'
+WITH (FORMAT CSV, HEADER);
+
+-- adding new column to meat table
+ALTER TABLE meat_poultry_egg_establishments
+ADD COLUMN inspection_deadline timestamp with time zone;
+
+-- updating the column with default data based on values from another table
+UPDATE meat_poultry_egg_establishments establishments
+SET inspection_deadline = '2022-12-01 00:00 EST'
+WHERE EXISTS (
+    SELECT state_regions.region
+    FROM state_regions
+    WHERE establishments.st = state_regions.st
+    AND state_regions.region = 'New England');
+
+-- checking around
+SELECT e.st, inspection_deadline
+FROM meat_poultry_egg_establishments e
+JOIN state_regions streg
+ON e.st = streg.st
+WHERE streg.region = 'New England';
+
+SELECT region, count(region)
+FROM state_regions
+GROUP BY region
+ORDER BY count(region);
+
+SELECT *
+FROM state_regions
+WHERE region = 'New England';
+
+SELECT st, inspection_deadline
+FROM meat_poultry_egg_establishments
+GROUP BY st, meat_poultry_egg_establishments.inspection_deadline
+ORDER BY st;
+
+
+-- deleting unneeded data
+/*
+ deleting all rows from a table:
+ DELETE FROM table_name;
+
+ deleting specific rows from a table
+ DELETE FROM table_name WHERE expression;
+
+ deleting all rows - faster
+ TRUNCATE table_name;
+
+ deleting all rows plus possibility to restart IDENTITY:
+ TRUNCATE table_name RESTART IDENTITY;
+
+ deleting column from a table
+ ALTER TABLE table_name DROP COLUMN column_name;
+
+ deleting table from a database:
+ DROP TABLE table_name;
+ */
+
+DELETE FROM meat_poultry_egg_establishments
+WHERE st IN ('AS', 'GU', 'MP', 'PR', 'VI');
+
+ALTER TABLE meat_poultry_egg_establishments
+DROP COLUMN zip_copy;
+
+DROP TABLE meat_poultry_egg_establishments_backup;
+
+-- using transaction to save revert changes
+START TRANSACTION;
+
+UPDATE meat_poultry_egg_establishments
+SET company = 'AGRO Merchantss Oakland LLC'
+WHERE company = 'AGRO Merchants Oakland, LLC';
+
+SELECT company
+FROM meat_poultry_egg_establishments
+WHERE company LIKE 'AGRO%'
+ORDeR BY company;
+
+ROLLBACK;
+
+
+-- improving performance when updating large tables
+-- creating new (backup) table with adding new column with default value
+CREATE TABLE meat_poultry_establishments_backup AS
+    SELECT  *, '2023-02-14 00:00 EST'::timestamp with time zone AS reviewed_date
+    FROM meat_poultry_egg_establishments;
+
+-- swap table names
+ALTER TABLE meat_poultry_egg_establishments RENAME TO meat_temp;
+ALTER TABLE meat_poultry_egg_establishments_backup RENAME TO meat_poultry_egg_establishments;
+ALTER TABLE meat_temp RENAME TO meat_poultry_egg_establishments_backup;
