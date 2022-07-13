@@ -337,3 +337,47 @@ CREATE TABLE meat_poultry_establishments_backup AS
 ALTER TABLE meat_poultry_egg_establishments RENAME TO meat_temp;
 ALTER TABLE meat_poultry_egg_establishments_backup RENAME TO meat_poultry_egg_establishments;
 ALTER TABLE meat_temp RENAME TO meat_poultry_egg_establishments_backup;
+
+
+-- try it yourself exercises
+SELECT activities, count(activities)
+FROM meat_poultry_egg_establishments
+GROUP BY activities;
+
+-- 1. two new boolean columns
+ALTER TABLE meat_poultry_egg_establishments
+ADD COLUMN meat_processing boolean;
+
+ALTER TABLE meat_poultry_egg_establishments
+ADD COLUMN poultry_processing boolean;
+
+-- 2. update new columns based on particular activity
+UPDATE meat_poultry_egg_establishments
+SET meat_processing = TRUE
+WHERE activities LIKE '%Meat Processing%';
+
+UPDATE meat_poultry_egg_establishments
+SET poultry_processing = TRUE
+WHERE activities LIKE '%Poultry Processing%';
+
+SELECT activities, meat_processing, poultry_processing
+FROM meat_poultry_egg_establishments
+WHERE meat_processing = TRUE OR poultry_processing = TRUE;
+
+-- 3. how many plant perform each activity and how many both
+SELECT (
+    (SELECT count(meat_processing) AS processing_meat
+            FROM meat_poultry_egg_establishments
+            WHERE meat_processing = TRUE),
+    (SELECT count(poultry_processing) AS processing_poultry
+            FROM meat_poultry_egg_establishments
+            WHERE poultry_processing = TRUE),
+    (SELECT count(meat_processing) + count(poultry_processing) AS processing_both
+            FROM meat_poultry_egg_establishments
+            WHERE meat_processing = TRUE AND poultry_processing = TRUE));
+
+
+SELECT activities
+FROM meat_poultry_egg_establishments
+WHERE poultry_processing IS NULL AND meat_processing IS NULL
+GROUP BY activities;
