@@ -123,3 +123,118 @@ viewing modified data with RETURNING (postgres specific)
  RETURNING column_a, column_b, column_c;
  */
 
+-- creating table backups
+CREATE TABLE meat_poultry_egg_establishments_backup AS
+    SELECT * FROM meat_poultry_egg_establishments;
+
+-- check count rows if backup was successful
+SELECT (SELECT count(*) FROM meat_poultry_egg_establishments) AS original,
+       (SELECT count(*) FROM meat_poultry_egg_establishments_backup AS backup);
+
+-- creating a column copy
+ALTER TABLE meat_poultry_egg_establishments
+ADD COLUMN st_copy text;
+
+-- update this column with the values of original column
+UPDATE meat_poultry_egg_establishments
+SET st_copy = st;
+
+-- check if the column copy was successful
+SELECT st,
+       st_copy
+FROM meat_poultry_egg_establishments
+WHERE st IS DISTINCT FROM meat_poultry_egg_establishments.st_copy
+ORDER BY st;
+
+
+-- updating rows where values are missing
+SELECT establishment_number,
+       st
+FROM meat_poultry_egg_establishments
+WHERE st IS NULL;
+
+UPDATE meat_poultry_egg_establishments
+SET st = 'MN'
+WHERE establishment_number = 'V18677A';
+
+UPDATE meat_poultry_egg_establishments
+SET st = 'AL'
+WHERE establishment_number = 'M45319+P45319';
+
+UPDATE meat_poultry_egg_establishments
+SET st = 'WI'
+WHERE establishment_number = 'M263A+P263A+V263A';
+
+-- check if st values were updated successfully
+SELECT st,
+       establishment_number
+FROM meat_poultry_egg_establishments
+WHERE establishment_number IN ('V18677A', 'M45319+P45319', 'M263A+P263A+V263A');
+
+-- restoring original values
+-- from column backup
+UPDATE meat_poultry_egg_establishments
+SET st = st_copy;
+
+-- from table meat_poultry_egg_establishments_backup
+UPDATE meat_poultry_egg_establishments original
+SET st = backup.st
+FROM meat_poultry_egg_establishments_backup backup
+WHERE original.establishment_number = backup.establishment_number;
+
+-- updating values for consistency
+SELECT DISTINCT company
+FROM meat_poultry_egg_establishments
+WHERE company LIKE 'Armour%';
+
+-- adding column for updating operation (to backup original column)
+ALTER TABLE meat_poultry_egg_establishments
+ADD COLUMN company_standard text;
+
+-- filling copied column with values
+UPDATE meat_poultry_egg_establishments
+SET company_standard = company;
+
+-- update column with standardized name for specific company
+UPDATE meat_poultry_egg_establishments
+SET company_standard = 'Armour-Eckrich Meats'
+WHERE company LIKE 'Armour%'
+RETURNING company, meat_poultry_egg_establishments.company_standard;
+
+-- verifying the company has the standard name now
+SELECT DISTINCT meat_poultry_egg_establishments.company_standard
+FROM meat_poultry_egg_establishments
+WHERE company LIKE 'Armour%';
+
+-- repairing ZIP code using concatenation
+ALTER TABLE meat_poultry_egg_establishments
+ADD COLUMN zip_copy text;
+
+UPDATE meat_poultry_egg_establishments
+SET zip_copy = zip;
+
+-- list all short zips grouped by st
+SELECT st, length(zip) AS length_zip
+FROM meat_poultry_egg_establishments
+WHERE length(zip) < 5
+GROUP BY st, length_zip
+ORDER BY length(zip) DESC;
+
+
+-- update 3 char long zips
+UPDATE meat_poultry_egg_establishments
+SET zip = '00' || zip
+WHERE st IN ('PR', 'VI') AND length(zip) = 3
+RETURNING st, zip;
+
+-- update 4 char long zips
+UPDATE meat_poultry_egg_establishments
+SET zip = '0' || zip
+WHERE st IN ('CT', 'MA', 'ME', 'NH', 'NJ', 'RI', 'VT') AND length(zip) = 4
+RETURNING st, zip;
+
+SELECT st, zip
+FROM meat_poultry_egg_establishments
+WHERE length(zip) < 5;
+
+-- updating values accross tables
