@@ -144,3 +144,63 @@ FROM nyc_yellow_taxi_trips
 GROUP BY trip_hour
 ORDER BY trip_hour;
 
+-- Exporting taxi pickups per hour to a CSV file
+COPY
+    (SELECT
+        date_part('hour', tpep_pickup_datetime) AS trip_hour,
+        count(*)
+    FROM nyc_yellow_taxi_trips
+    GROUP BY trip_hour
+    ORDER BY trip_hour
+    )
+TO '/home/peter-augustinak/others/dev/sql/practical-sql/hourly_taxi_pickups.csv'
+WITH (FORMAT CSV, HEADER);
+
+-- Calculating median trip time by hour
+
+SELECT
+    date_part('hour', tpep_pickup_datetime) AS trip_hour,
+    percentile_cont(.5)
+        WITHIN GROUP (ORDER BY
+            tpep_dropoff_datetime - tpep_pickup_datetime) AS median_trip
+FROM nyc_yellow_taxi_trips
+GROUP BY trip_hour
+ORDER BY trip_hour;
+
+CREATE TABLE train_rides (
+    trip_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    segment text NOT NULL,
+    departure timestamptz NOT NULL,
+    arrival timestamptz NOT NULL
+);
+
+INSERT INTO train_rides (segment, departure, arrival)
+VALUES
+    ('Chicago to New York', '2020-11-13 21:30 CST', '2020-11-14 18:23 EST'),
+    ('New York to New Orleans', '2020-11-15 14:15 EST', '2020-11-16 19:32 CST'),
+    ('New Orleans to Los Angeles', '2020-11-17 13:45 CST', '2020-11-18 9:00 PST'),
+    ('Los Angeles to San Francisco', '2020-11-19 10:10 PST', '2020-11-19 21:24 PST'),
+    ('San Francisco to Denver', '2020-11-20 9:10 PST', '2020-11-21 18:38 MST'),
+    ('Denver to Chicago', '2020-11-22 19:10 MST', '2020-11-23 14:50 CST');
+
+SET TIME ZONE 'US/Central';
+
+SELECT * FROM train_rides;
+
+SELECT segment,
+       to_char(departure, 'YYYY-MM-DD HH12:MI a.m. TZ') AS departure,
+       arrival - departure AS segment_duration
+FROM train_rides;
+
+SELECT segment,
+       arrival - departure AS segment_duration,
+       sum(arrival - departure) OVER (ORDER BY trip_id) AS cume_duration
+FROM train_rides;
+
+-- Listing 12-14: Using justify_interval() to better format cumulative trip duration
+
+SELECT segment,
+       arrival - departure AS segment_duration,
+       justify_interval(sum(arrival - departure)
+                        OVER (ORDER BY trip_id)) AS cume_duration
+FROM train_rides;
