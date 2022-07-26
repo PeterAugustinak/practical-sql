@@ -313,3 +313,45 @@ SELECT station_name, max_temperature_group, count(*)
 FROM temps_collapsed
 GROUP BY station_name, max_temperature_group
 ORDER BY station_name, count(*) DESC;
+
+
+-- try it yourself exercises
+-- 1. answer: 86-87
+WITH temps_collapsed (station_name, max_temperature_group) AS
+    (SELECT station_name,
+           CASE WHEN max_temp >= 90 THEN '90 or more'
+                WHEN max_temp >= 88 AND max_temp < 90 THEN '88-89'
+                WHEN max_temp >= 86 AND max_temp < 88 THEN '86-87'
+                WHEN max_temp >= 84 AND max_temp < 86 THEN '84-85'
+                WHEN max_temp >= 82 AND max_temp < 84 THEN '82-83'
+                WHEN max_temp >= 80 AND max_temp < 82 THEN '80-81'
+                WHEN max_temp < 80 THEN '79 or less'
+                ELSE 'No reading'
+            END
+    FROM temperature_readings
+    WHERE station_name LIKE '%WAIKIKI%')
+
+
+SELECT station_name, max_temperature_group, count(*)
+FROM temps_collapsed
+GROUP BY station_name, max_temperature_group
+ORDER BY station_name, count(*) DESC;
+
+-- 2.
+SELECT *
+FROM crosstab('SELECT flavor,
+                      office,
+                      count(*)
+               FROM ice_cream_survey
+               GROUP BY flavor, office
+               ORDER BY flavor',
+
+              'SELECT office
+               FROM ice_cream_survey
+               GROUP BY office
+               ORDER BY office')
+
+AS (flavor text,
+    downtown bigint,
+    midtown bigint,
+    uptown bigint); -- looks like the order is important here
