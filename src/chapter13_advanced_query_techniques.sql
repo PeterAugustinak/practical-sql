@@ -204,3 +204,112 @@ SELECT county_name,
 FROM us_counties_pop_est_2019
 CROSS JOIN us_median
 WHERE (pop_est_2019 - us_median_pop) BETWEEN -1000 AND 1000;
+
+
+-- Cross Tabulations
+-- install crosstab function:
+CREATE EXTENSION tablefunc;
+
+-- ice cream survey
+CREATE TABLE ice_cream_survey (
+    response_id integer PRIMARY KEY,
+    office text,
+    flavor text
+);
+
+COPY ice_cream_survey
+FROM '/var/lib/postgresql/ice_cream_survey.csv'
+WITH (FORMAT CSV, HEADER );
+
+SELECT *
+FROM ice_cream_survey
+ORDER BY response_id
+LIMIT 5;
+
+SELECT *
+FROM crosstab('SELECT office,
+                      flavor,
+                      count(*)
+               FROM ice_cream_survey
+               GROUP BY office, flavor
+               ORDER BY office',
+
+              'SELECT flavor
+               FROM ice_cream_survey
+               GROUP BY flavor
+               ORDER BY flavor')
+
+AS (office text,
+    chocolate bigint,
+    strawberry bigint,
+    vanilla bigint);
+
+-- temperature readings
+CREATE TABLE temperature_readings (
+    station_name text,
+    observation_date date,
+    max_temp integer,
+    min_temp integer,
+    CONSTRAINT temp_key PRIMARY KEY (station_name, observation_date)
+);
+
+COPY temperature_readings
+FROM '/var/lib/postgresql/temperature_readings.csv'
+WITH (FORMAT CSV, HEADER );
+
+SELECT *
+FROM crosstab('SELECT station_name,
+               date_part(''month'', observation_date),
+               percentile_cont(.5) WITHIN GROUP (ORDER BY max_temp)
+               FROM temperature_readings
+               GROUP BY station_name, date_part(''month'', observation_date)
+               ORDER BY station_name',
+
+               'SELECT month
+               FROM generate_series(1, 12) month')
+AS (station text,
+    jan numeric(3,0),
+    feb numeric(3,0),
+    mar numeric(3,0),
+    apr numeric(3,0),
+    may numeric(3,0),
+    jun numeric(3,0),
+    jul numeric(3,0),
+    aug numeric(3,0),
+    sep numeric(3,0),
+    oct numeric(3,0),
+    nov numeric(3,0),
+    dec numeric(3,0)
+);
+
+
+-- CASE
+SELECT max_temp,
+       CASE WHEN max_temp >= 90 THEN 'Hot'
+            WHEN max_temp >= 70 AND max_temp < 90 THEN 'Warm'
+            WHEN max_temp >= 50 AND max_temp < 70 THEN 'Pleasant'
+            WHEN max_temp >= 33 AND max_temp < 50 THEN 'Cold'
+            WHEN max_temp >= 20 AND max_temp < 33 THEN 'Frigid'
+            WHEN max_temp < 20 THEN 'Inhumane'
+            ELSE 'No reading'
+        END AS temperature_group
+FROM temperature_readings
+ORDER BY station_name, observation_date;
+
+-- using CASE in common table expression
+WITH temps_collapsed (station_name, max_temperature_group) AS
+    (SELECT station_name,
+           CASE WHEN max_temp >= 90 THEN 'Hot'
+                WHEN max_temp >= 70 AND max_temp < 90 THEN 'Warm'
+                WHEN max_temp >= 50 AND max_temp < 70 THEN 'Pleasant'
+                WHEN max_temp >= 33 AND max_temp < 50 THEN 'Cold'
+                WHEN max_temp >= 20 AND max_temp < 33 THEN 'Frigid'
+                WHEN max_temp < 20 THEN 'Inhumane'
+                ELSE 'No reading'
+            END
+    FROM temperature_readings)
+
+SELECT station_name, max_temperature_group, count(*)
+FROM temps_collapsed
+GROUP BY station_name, max_temperature_group
+ORDER BY station_name, count(*) DESC;
