@@ -125,3 +125,201 @@ SELECT
         AS case_number
 FROM crime_reports
 ORDER BY crime_id;
+
+-- updating date_1 column
+UPDATE crime_reports
+SET date_1 =
+(
+    (regexp_match(original_text, '\d{1,2}\/\d{1,2}\/\d{2}'))[1]
+        || ' ' ||
+    (regexp_match(original_text, '\/\d{2}\n(\d{4})'))[1]
+        ||' US/Eastern'
+)::timestamptz
+RETURNING crime_id, date_1, original_text;
+
+-- updating all crime reports columns
+UPDATE crime_reports
+SET date_1 =
+    (
+      (regexp_match(original_text, '\d{1,2}\/\d{1,2}\/\d{2}'))[1]
+          || ' ' ||
+      (regexp_match(original_text, '\/\d{2}\n(\d{4})'))[1]
+          ||' US/Eastern'
+    )::timestamptz,
+
+    date_2 =
+    CASE
+    -- if there is no second date but there is a second hour
+        WHEN (SELECT regexp_match(original_text, '-(\d{1,2}\/\d{1,2}\/\d{2})') IS NULL)
+                     AND (SELECT regexp_match(original_text, '\/\d{2}\n\d{4}-(\d{4})') IS NOT NULL)
+        THEN
+          ((regexp_match(original_text, '\d{1,2}\/\d{1,2}\/\d{2}'))[1]
+              || ' ' ||
+          (regexp_match(original_text, '\/\d{2}\n\d{4}-(\d{4})'))[1]
+              ||' US/Eastern'
+          )::timestamptz
+
+    -- if there is both a second date and second hour
+        WHEN (SELECT regexp_match(original_text, '-(\d{1,2}\/\d{1,2}\/\d{2})') IS NOT NULL)
+              AND (SELECT regexp_match(original_text, '\/\d{2}\n\d{4}-(\d{4})') IS NOT NULL)
+        THEN
+          ((regexp_match(original_text, '-(\d{1,2}\/\d{1,2}\/\d{2})'))[1]
+              || ' ' ||
+          (regexp_match(original_text, '\/\d{2}\n\d{4}-(\d{4})'))[1]
+              ||' US/Eastern'
+          )::timestamptz
+    END,
+    street = (regexp_match(original_text, 'hrs.\n(\d+ .+(?:Sq.|Plz.|Dr.|Ter.|Rd.))'))[1],
+    city = (regexp_match(original_text,
+                           '(?:Sq.|Plz.|Dr.|Ter.|Rd.)\n(\w+ \w+|\w+)\n'))[1],
+    crime_type = (regexp_match(original_text, '\n(?:\w+ \w+|\w+)\n(.*):'))[1],
+    description = (regexp_match(original_text, ':\s(.+)(?:C0|SO)'))[1],
+    case_number = (regexp_match(original_text, '(?:C0|SO)[0-9]+'))[1];
+
+SELECT date_1,
+       street,
+       city,
+       crime_type
+FROM crime_reports
+ORDER BY crime_id;
+
+
+-- Full-Text Search
+
+-- Full-text search operators:
+-- & (AND)
+-- | (OR)
+-- ! (NOT)
+
+-- this will find all base word and positions
+SELECT to_tsvector('english', 'I am walking across the sitting room to sit with you');
+
+-- check languages
+SELECT cfgname FROM pg_ts_config;
+
+-- create search term
+SELECT to_tsquery('english', 'walking & sitting');
+
+-- @@ -> match operator for searching
+-- return true as both search terms are present
+SELECT to_tsvector('english', 'I am walking across the sitting room') @@
+       to_tsquery('english', 'walking & sitting');
+-- returns false because not both search terms are present
+SELECT to_tsvector('english', 'I am walking across the sitting room') @@
+       to_tsquery('english', 'walking & running');
+
+-- create table for full-text search
+CREATE TABLE president_speeches (
+    president text NOT NULL,
+    title text NOT NULL,
+    speech_date date NOT NULL,
+    speech_text text NOT NULL,
+    search_speech_text tsvector,
+    CONSTRAINT speech_key PRIMARY KEY (president, speech_date)
+);
+
+COPY president_speeches (president, title, speech_date, speech_text)
+FROM '/var/lib/postgresql/president_speeches.csv'
+WITH (FORMAT CSV, DELIMITER '|', HEADER OFF, QUOTE '@');
+
+SELECT * FROM president_speeches ORDER BY speech_date;
+
+UPDATE president_speeches
+SET search_speech_text = to_tsvector('english', speech_text);
+
+SELECT length(search_speech_text)
+FROM president_speeches
+WHERE president = 'John F. Kennedy' AND speech_date = '1961-01-30';
+
+CREATE INDEX search_idx ON
+president_speeches USING gin(search_speech_text);
+
+-- searching speech text
+SELECT president, speech_date
+FROM president_speeches
+WHERE search_speech_text @@ to_tsquery('english', 'Vietnam')
+ORDER BY speech_date;
+
+-- showing search result locations
+SELECT president,
+       speech_date,
+       ts_headline(speech_text, to_tsquery('english', 'tax'),
+                   'StartSel = <,
+                    StopSel = >,
+                    MinWords=5,
+                    MaxWords=7,
+                    MaxFragments=1')
+FROM president_speeches
+WHERE search_speech_text @@ to_tsquery('english', 'tax')
+ORDER BY speech_date;
+
+-- using multiple search terms - one must occur, second must not
+-- means following finds speeches talking transportations not related to roads
+SELECT president,
+       speech_date,
+       ts_headline(speech_text,
+                   to_tsquery('english', 'transportation & !roads'),
+                   'StartSel = <,
+                    StopSel = >,
+                    MinWords=5,
+                    MaxWords=7,
+                    MaxFragments=1')
+FROM president_speeches
+WHERE search_speech_text @@
+      to_tsquery('english', 'transportation & !roads')
+ORDER BY speech_date;
+
+-- searching for adjacent words - words must be back to back
+SELECT president,
+       speech_date,
+       ts_headline(speech_text,
+                   to_tsquery('english', 'military <-> defense'),
+                   'StartSel = <,
+                    StopSel = >,
+                    MinWords=5,
+                    MaxWords=7,
+                    MaxFragments=1')
+FROM president_speeches
+WHERE search_speech_text @@
+      to_tsquery('english', 'military <-> defense')
+ORDER BY speech_date;
+
+-- same but with a distance of 2
+SELECT president,
+       speech_date,
+       ts_headline(speech_text,
+                   to_tsquery('english', 'military <2> defense'),
+                   'StartSel = <,
+                    StopSel = >,
+                    MinWords=5,
+                    MaxWords=7,
+                    MaxFragments=2')
+FROM president_speeches
+WHERE search_speech_text @@
+      to_tsquery('english', 'military <2> defense')
+ORDER BY speech_date;
+
+-- ranking query matches by relevance
+SELECT president,
+       speech_date,
+       ts_rank(search_speech_text,
+               to_tsquery('english', 'war & security & threat & enemy'))
+               AS score
+FROM president_speeches
+WHERE search_speech_text @@
+      to_tsquery('english', 'war & security & threat & enemy')
+ORDER BY score DESC
+LIMIT 5;
+
+-- normalizing ts_rank() by speech length
+SELECT president,
+       speech_date,
+       round(
+           ts_rank(search_speech_text,
+               to_tsquery('english', 'war & security & threat & enemy'), 2)::numeric,
+           8)
+               AS score
+FROM president_speeches
+WHERE search_speech_text @@
+      to_tsquery('english', 'war & security & threat & enemy')
+ORDER BY score DESC;
