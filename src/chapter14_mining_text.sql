@@ -68,3 +68,60 @@ SELECT regexp_split_to_array('Phil Mike Tony Steve', ' ');
 SELECT array_length(regexp_split_to_array('Phil Mike Tony Steve', ' '), 1);
 
 
+-- turning text into data using regular expression functions
+CREATE TABLE crime_reports (
+    crime_id integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    case_number text,
+    date_1 timestamptz,
+    date_2 timestamptz,
+    street text,
+    city text,
+    crime_type text,
+    description text,
+    original_text text NOT NULL
+);
+
+COPY crime_reports (original_text)
+FROM '/var/lib/postgresql/crime_reports.csv'
+WITH (FORMAT CSV, HEADER OFF, QUOTE '"');
+
+-- first date
+SELECT crime_id,
+       regexp_match(original_text,
+           '\d{1,2}\/\d{1,2}\/\d{2}')
+FROM crime_reports
+ORDER BY crime_id;
+
+-- second date (match vs matches with 'g' - return every match as a row
+SELECT crime_id,
+       regexp_matches(original_text,
+           '\d{1,2}\/\d{1,2}\/\d{2}', 'g')
+FROM crime_reports
+ORDER BY crime_id;
+
+SELECT crime_id,
+       regexp_match(original_text, '\d{1,2}\/\d{1,2}\/\d{2}') AS date_1,
+       CASE WHEN EXISTS (SELECT regexp_matches(original_text, '-(\d{1,2}\/\d{1,2}\/\d{2})'))
+            THEN regexp_match(original_text, '-(\d{1,2}\/\d{1,2}\/\d{2})')
+            ELSE NULL
+            END AS date_2,
+       regexp_match(original_text, '\/\d{2}\n(\d{4})') AS hour_1,
+       CASE WHEN EXISTS (SELECT regexp_matches(original_text, '\/\d{2}\n\d{4}-(\d{4})'))
+            THEN regexp_match(original_text, '\/\d{2}\n\d{4}-(\d{4})')
+            ELSE NULL
+            END AS hour_2,
+       regexp_match(original_text, 'hrs.\n(\d+ .+(?:Sq.|Plz.|Dr.|Ter.|Rd.))') AS street,
+       regexp_match(original_text, '(?:Sq.|Plz.|Dr.|Ter.|Rd.)\n(\w+ \w+|\w+)\n') AS city,
+       regexp_match(original_text, '\n(?:\w+ \w+|\w+)\n(.*):') AS crime_type,
+       regexp_match(original_text, ':\s(.+)(?:C0|SO)') AS description,
+       regexp_match(original_text, '(?:C0|SO)[0-9]+') AS case_number
+FROM crime_reports
+ORDER BY crime_id;
+
+-- retrieving value from within an array
+SELECT
+    crime_id,
+    (regexp_match(original_text, '(?:C0|SO)[0-9]+'))[1]
+        AS case_number
+FROM crime_reports
+ORDER BY crime_id;
