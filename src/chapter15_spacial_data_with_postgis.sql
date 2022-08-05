@@ -182,3 +182,41 @@ SELECT market_name,
 FROM farmers_markets
 ORDER BY geog_point <-> ST_GeogFromText('POINT(-68.2041607 44.3876414)')
 LIMIT 50;
+
+
+-- Working with Census shapefiles
+-- import shp file to postgres
+-- shp2pgsql -I -s 4269 -W LATIN1 tl_2019_us_county.shp us_counties_2019_shp | psql -d analysis -U postgres
+
+-- checking the geom columns
+SELECT ST_AsText(geom)
+FROM us_counties_2019_shp
+ORDER BY gid
+LIMIT 1;
+
+-- finding the largest counties by area
+SELECT name,
+       statefp AS st,
+       round(
+             ( ST_Area(geom::geography) / 1000000)::numeric, 2
+            )  AS square_kms
+FROM us_counties_2019_shp
+ORDER BY square_kms DESC
+LIMIT 5;
+
+-- finding a county by longitude and latitude
+SELECT sh.name,
+       c.state_name
+FROM us_counties_2019_shp sh JOIN us_counties_pop_est_2019 c
+    ON sh.statefp = c.state_fips AND sh.countyfp = c.county_fips
+WHERE ST_Within(
+         'SRID=4269;POINT(-118.3419063 34.0977076)'::geometry, geom
+);
+
+-- using ST_DWithin to count people near the city
+SELECT sum(c.pop_est_2019) AS pop_est_2019
+FROM us_counties_2019_shp sh JOIN us_counties_pop_est_2019 c
+    ON sh.statefp = c.state_fips AND sh.countyfp = c.county_fips
+WHERE ST_DWithin(sh.geom::geography,
+          ST_GeogFromText('SRID=4269;POINT(-96.699656 40.811567)'),
+          80467);
