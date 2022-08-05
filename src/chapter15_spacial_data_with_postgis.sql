@@ -220,3 +220,57 @@ FROM us_counties_2019_shp sh JOIN us_counties_pop_est_2019 c
 WHERE ST_DWithin(sh.geom::geography,
           ST_GeogFromText('SRID=4269;POINT(-96.699656 40.811567)'),
           80467);
+
+
+CREATE INDEX us_counties_2019_shp_geog_idx ON us_counties_2019_shp USING GIST (CAST(geom AS geography));
+
+-- displaying counties near the city
+SELECT sh.name,
+       c.state_name,
+       c.pop_est_2019,
+       ST_Transform(sh.geom, 4326) AS geom
+FROM us_counties_2019_shp sh JOIN us_counties_pop_est_2019 c
+    ON sh.statefp = c.state_fips AND sh.countyfp = c.county_fips
+WHERE ST_DWithin(sh.geom::geography,
+          ST_GeogFromText('SRID=4269;POINT(-96.699656 40.811567)'),
+          80467)
+ORDER BY c.pop_est_2019 DESC;
+
+
+-- Performing spatial joins
+-- import tables
+shp2pgsql -I -s 4269 -W LATIN1 tl_2019_35049_linearwater.shp santafe_linearwater_2019 | psql -d analysis -U postgres
+shp2pgsql -I -s 4269 -W LATIN1 tl_2019_35049_roads.shp santafe_roads_2019 | psql -d analysis -U postgre
+
+-- using geompetry type to determine geometry
+SELECT ST_GeometryType(geom)
+FROM santafe_linearwater_2019
+LIMIT 1;
+
+SELECT ST_GeometryType(geom)
+FROM santafe_roads_2019
+LIMIT 1;
+
+-- joining the census roads and water tables - where the river and road are
+-- intersected
+SELECT water.fullname AS waterway,
+       roads.rttyp,
+       roads.fullname AS road,
+       water.geom,
+       roads.geom
+FROM santafe_linearwater_2019 water JOIN santafe_roads_2019 roads
+    ON ST_Intersects(water.geom, roads.geom)
+WHERE water.fullname = 'Santa Fe Riv'
+      AND roads.fullname IS NOT NULL
+ORDER BY roads.fullname;
+
+-- finding the exact point where the river and road are intersected
+SELECT water.fullname AS waterway,
+       roads.rttyp,
+       roads.fullname AS road,
+       ST_AsText(ST_Intersection(water.geom, roads.geom))
+FROM santafe_linearwater_2019 water JOIN santafe_roads_2019 roads
+    ON ST_Intersects(water.geom, roads.geom)
+WHERE water.fullname = 'Santa Fe Riv'
+      AND roads.fullname IS NOT NULL
+ORDER BY roads.fullname;
