@@ -178,3 +178,118 @@ LIMIT 5;
 
 
 -- TRIGGERS
+-- logging grade updates to a table
+CREATE TABLE grades (
+    student_id bigint,
+    course_id bigint,
+    course text NOT NULL,
+    grade text NOT NULL,
+PRIMARY KEY (student_id, course_id)
+);
+
+INSERT INTO grades
+VALUES
+    (1, 1, 'Biology 2', 'F'),
+    (1, 2, 'English 11B', 'D'),
+    (1, 3, 'World History 11B', 'C'),
+    (1, 4, 'Trig 2', 'B');
+
+CREATE TABLE grades_history (
+    student_id bigint NOT NULL,
+    course_id bigint NOT NULL,
+    change_time timestamp with time zone NOT NULL,
+    course text NOT NULL,
+    old_grade text NOT NULL,
+    new_grade text NOT NULL,
+PRIMARY KEY (student_id, course_id, change_time)
+);
+
+-- creating the function to trigger
+CREATE OR REPLACE FUNCTION record_if_grade_changed()
+    RETURNS trigger AS
+$$
+BEGIN
+    IF NEW.grade <> OLD.grade THEN
+    INSERT INTO grades_history (
+        student_id,
+        course_id,
+        change_time,
+        course,
+        old_grade,
+        new_grade)
+    VALUES
+        (OLD.student_id,
+         OLD.course_id,
+         now(),
+         OLD.course,
+         OLD.grade,
+         NEW.grade);
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- creating trigger
+CREATE TRIGGER grades_update
+    AFTER UPDATE
+    ON grades
+    FOR EACH ROW
+    EXECUTE PROCEDURE record_if_grade_changed();
+
+-- testing the trigger
+UPDATE grades
+SET grade = 'D'
+WHERE student_id = 1 AND course_id = 1;
+
+
+-- Automatically classifying temperatures
+CREATE TABLE temperature_test (
+    station_name text,
+    observation_date date,
+    max_temp integer,
+    min_temp integer,
+    max_temp_group text,
+PRIMARY KEY (station_name, observation_date)
+);
+
+-- creating function to
+CREATE OR REPLACE FUNCTION classify_max_temp()
+    RETURNS trigger AS
+$$
+BEGIN
+    CASE
+       WHEN NEW.max_temp >= 90 THEN
+           NEW.max_temp_group := 'Hot';
+       WHEN NEW.max_temp >= 70 AND NEW.max_temp < 90 THEN
+           NEW.max_temp_group := 'Warm';
+       WHEN NEW.max_temp >= 50 AND NEW.max_temp < 70 THEN
+           NEW.max_temp_group := 'Pleasant';
+       WHEN NEW.max_temp >= 33 AND NEW.max_temp < 50 THEN
+           NEW.max_temp_group := 'Cold';
+       WHEN NEW.max_temp >= 20 AND NEW.max_temp < 33 THEN
+           NEW.max_temp_group := 'Frigid';
+       WHEN NEW.max_temp < 20 THEN
+           NEW.max_temp_group := 'Inhumane';
+       ELSE NEW.max_temp_group := 'No reading';
+    END CASE;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- creating trigger
+CREATE TRIGGER temperature_insert
+    BEFORE INSERT
+    ON temperature_test
+    FOR EACH ROW
+    EXECUTE PROCEDURE
+classify_max_temp();
+
+-- insert new data to temperature_test table to see trigger of the function
+-- works
+INSERT INTO temperature_test
+VALUES
+    ('North Station', '1/19/2023', 10, -3),
+    ('North Station', '3/20/2023', 28, 19),
+    ('North Station', '5/2/2023', 65, 42),
+    ('North Station', '8/9/2023', 93, 74),
+    ('North Station', '12/14/2023', NULL, NULL);
