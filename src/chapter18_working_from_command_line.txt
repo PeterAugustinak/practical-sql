@@ -1,0 +1,87 @@
+# launching db
+psql -d database_name -U user_name
+
+# help commands structure
+\? # psql commands like \dt
+\? option # commands with option such as psql -U
+\? variabes # commands with variables such as VERSION
+\h # lst of SQL commands
+\q # quit from pgsql
+
+# create DB
+CREATE DATABASE test;
+
+# connect to another db
+\c test
+
+# connect to DB as another user
+\c db user
+
+# drop db
+DROP DATABASE test;
+
+# setting password file
+# home dir, .pgpass
+# hostname:port:database:username:password
+
+# running SQL queries - standard one line
+SELECT county_name FROM us_counties_pop_est_2019 ORDER BY county_name LIMIT 3;
+
+# multiline - until ; is not added, multiline is enabled
+
+# checking open parentheses works as well
+
+# editing queries
+\e # opens default editor with last query
+
+# navigating and formatting results
+# paging
+\pset pager
+\pset border 2 # border around cell
+\pset format unaligned # left aligned
+\pset null 'NULL' # display null values
+
+# viewing expanded results - put by rows
+\x
+\x # set to automatically change to record by record view when longer
+
+# META COMMANDS
+\dt # show tables within current DB
+\dt us* # matches specific tables to display
+\l # all db's in the current server
+\d # info about tables
+\di # shows indexes
+\du # users
+\dv # views
+\dx # installed extensions
+
+
+# IMPORTING, EXPORTING AND USING FILES
+\copy state_regions
+FROM '/var/lib/postgresql/state_regions.csv'
+WITH (FORMAT CSV, HEADER);
+
+# passing sql commands to psql - using directly from command line
+psql -d analysis -U postgres -c
+'COPY state_regions FROM STDIN WITH (FORMAT CSV, HEADER);' <
+/var/lib/postgresql/state_regions.csv
+
+# saving query output to a file
+\pset format csv # telling what format we are going to save
+\o '/var/lib/postgresql/query_output.csv' # to set output destination
+SELECT query
+\o # back to standard output
+
+# reading and executing SQL stored in a file
+# directly in command line
+psql -d analysis -U postgres -f '/var/lib/postgresql/display_grades.sql'
+
+
+# ADDITIONAL COMMAND LINES UTILITIES
+# adding database
+createdb -U postgres -e box_office
+psql -d box_office -U postgres # connect to newly created DB
+
+# loading shapefiles with shp2pgsql
+# directly from command line
+shp2pgsql -I -s 4269 -W Latin1 tl_2019_us_counties_2019.shp us_counties_2019_shp | psql -d analysis -U postgres
